@@ -1,0 +1,157 @@
+import init.lenok.usb.rc
+import init.lenok.wifi.rc
+
+on init
+    # Set permissions for persist partition
+    mkdir /persist 0771 system system
+
+   # Support legacy paths
+   symlink /sdcard /mnt/sdcard
+   symlink /sdcard /storage/sdcard0
+
+on fs
+    mount_all /fstab.lenok
+
+on post-fs
+    restorecon_recursive /persist
+    restorecon /persist/bdaddr.txt
+
+on post-fs-data
+    # Load ADSP firmware
+    write /sys/kernel/boot_adsp/boot 1
+
+    # Update touch firmware if required
+    write /sys/bus/i2c/devices/5-0020/check_fw 1
+
+    mkdir /data/media 0770 media_rw media_rw
+    mkdir /data/misc/batteryd 0700 system system
+
+    # AKM setting data
+    mkdir /data/misc/sensors
+    chmod 775 /data/misc/sensors
+
+    # Create directory used by sensor subsystem
+    mkdir /persist/sensors
+    chmod 775 /persist/sensors
+    write /persist/sensors/sensors_settings 1
+    chmod 660 /persist/sensors/sensors_settings
+
+    # CPU frequency, suspend and governor
+    write /sys/module/lpm_levels/parameters/sleep_disabled 0
+    write /sys/module/lpm_levels/system/cpu0/pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu1/pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu2/pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu3/pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu0/standalone_pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu1/standalone_pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu2/standalone_pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu3/standalone_pc/suspend_enabled 1
+    write /sys/module/lpm_levels/system/cpu0/standalone_pc/idle_enabled 1
+    write /sys/module/lpm_levels/system/cpu1/standalone_pc/idle_enabled 1
+    write /sys/module/lpm_levels/system/cpu2/standalone_pc/idle_enabled 1
+    write /sys/module/lpm_levels/system/cpu3/standalone_pc/idle_enabled 1
+    write /sys/module/lpm_levels/system/cpu0/pc/idle_enabled 1
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor "ondemand"
+    write /sys/devices/system/cpu/cpufreq/ondemand/sampling_rate 50000
+    write /sys/devices/system/cpu/cpufreq/ondemand/up_threshold 90
+    write /sys/devices/system/cpu/cpufreq/ondemand/io_is_busy 1
+    write /sys/devices/system/cpu/cpufreq/ondemand/sampling_down_factor 4
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq 300000
+
+    setprop vold.post_fs_data_done 1
+
+on boot
+    write /sys/class/power_supply/battery/charging_enabled 0
+    write /sys/module/msm_thermal/core_control/enabled 0
+    # NOTE: The number of cores online should be kept in sync with
+    # dalvik.vm.image-dex2oat-threads and dalvik.vm.boot-dex2oat-threads in device.mk
+    write /sys/devices/system/cpu/cpu3/online 0
+    write /sys/devices/system/cpu/cpu2/online 0
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 787200
+    write /sys/module/msm_thermal/core_control/enabled 1
+
+    chown system system /sys/kernel/debug/kgsl/proc
+    chown system system /sys/bus/i2c/devices/5-0020/idle_mode
+
+    setprop ro.radio.noril yes
+
+    chmod 0600 /sys/class/rfkill/rfkill0/type
+    chown bluetooth bluetooth /sys/class/rfkill/rfkill0/type
+
+    chmod 0600 /sys/class/rfkill/rfkill0/state
+    chown bluetooth bluetooth /sys/class/rfkill/rfkill0/state
+
+    # Load Modem firmware
+    write /sys/kernel/debug/msm_subsys/modem get
+    write /sys/kernel/debug/msm_subsys/modem put
+
+    # adsp subsystem restart
+    write /sys/bus/msm_subsys/devices/subsys1/restart_level "related"
+
+    # Disable network time update
+    setprop config.disable_networktime true
+
+    # Set the fix freq to 200MHz for KGSL
+    write /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 200000000
+    write /sys/class/kgsl/kgsl-3d0/devfreq/min_freq 200000000
+    write /sys/class/kgsl/kgsl-3d0/devfreq/governor performance
+
+    # Set display alive check interval
+    write /sys/module/mdss_dsi/parameters/interval 1000
+
+on property:ro.debuggable=1
+    # Subsytem Ramdump collection
+    mkdir /data/tombstones 0777 system system
+    mkdir /data/tombstones/ramdump 0777 system system
+    restorecon_recursive /data/tombstones
+    write /sys/module/subsystem_restart/parameters/enable_ramdumps 1
+    start ssr_ramdump
+
+on property:sys.boot_completed=1
+    write /sys/class/power_supply/battery/charging_enabled 1
+
+on property:sys.cw_home_ready=1
+    write /sys/module/msm_thermal/core_control/enabled 0
+    write /sys/devices/system/cpu/cpu1/online 0
+    # Use userspace governor to set min=max=787MHz
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor "userspace"
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed 787200
+    write /sys/module/lpm_levels/parameters/sleep_disabled 0
+    write /sys/module/msm_thermal/core_control/enabled 1
+
+# dhcp daemon for bt tethering
+service dhcpcd_bt-pan /system/bin/dhcpcd -BKLG
+    disabled
+    oneshot
+
+service iprenew_bt-pan /system/bin/dhcpcd -n
+    disabled
+    oneshot
+
+# bugreport is triggered by holding down volume down, volume up and power
+service bugreport /system/bin/dumpstate -d -p -B \
+        -o /data/data/com.android.shell/files/bugreports/bugreport
+    class main
+    disabled
+    oneshot
+    keycodes 114 115 116
+
+service clockwork_proxy /system/bin/ClockworkProxy
+    class main
+
+# QCOM Sensor
+service sensors /system/bin/sensors.qcom
+    class main
+    user root
+    group root
+
+service irsc_util /system/bin/irsc_util "/etc/sec_config"
+    class main
+    user root
+    oneshot
+
+service ssr_ramdump /system/bin/subsystem_ramdump 1
+    class main
+    user root
+    group root
+    disabled

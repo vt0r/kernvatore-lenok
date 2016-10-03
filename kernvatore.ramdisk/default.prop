@@ -1,0 +1,26 @@
+#
+# ADDITIONAL_DEFAULT_PROPERTIES
+#
+ro.secure=1
+ro.allow.mock.location=0
+ro.debuggable=0
+ro.bt.bdaddr_path=/persist/bdaddr.txt
+ro.zygote=zygote32
+dalvik.vm.image-dex2oat-Xms=64m
+dalvik.vm.image-dex2oat-Xmx=64m
+dalvik.vm.dex2oat-Xms=64m
+dalvik.vm.dex2oat-Xmx=512m
+ro.dalvik.vm.native.bridge=0
+debug.atrace.tags.enableflags=0
+ro.adb.secure=1
+persist.adb.notify=0
+persist.raft.pump_kmsg=1
+bluetooth.force_pm_timer=2000
+#
+# BOOTIMAGE_BUILD_PROPERTIES
+#
+ro.bootimage.build.date=Wed Sep 14 00:12:40 UTC 2016
+ro.bootimage.build.date.utc=1473811960
+ro.bootimage.build.fingerprint=lge/lenok/lenok:6.0.1/M1D63X/3269884:user/release-keys
+persist.sys.usb.config=none
+
